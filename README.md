@@ -48,13 +48,14 @@ python -m ddl2poco.cli schema.sql
 ## Usage
 
 ```console
-ddl2poco [input.sql] [-n NAMESPACE] [-o OUTPUT.cs]
+ddl2poco [input.sql] [-n NAMESPACE] [-a] [-o OUTPUT.cs]
 ```
 
 | Flag | Effect |
 | --- | --- |
 | `input.sql` | Path to the DDL file. Reads **stdin** when omitted. |
 | `-n`, `--namespace` | Wrap the class in a file-scoped namespace. |
+| `-a`, `--annotations` | Emit EF Core data annotations. |
 | `-o`, `--output` | Write to a file instead of stdout. |
 
 Piping works, so it composes with whatever you already use:
@@ -62,6 +63,36 @@ Piping works, so it composes with whatever you already use:
 ```console
 $ pbpaste | ddl2poco -n Hr.Domain -o Employee.cs
 ```
+
+### EF Core data annotations
+
+Pass `--annotations` to derive attributes from the DDL you already parsed:
+
+```csharp
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+public class EmployeePayRun
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    public long PayRunId { get; set; }
+
+    [Required]
+    [StringLength(3)]
+    public string Currency { get; set; }
+}
+```
+
+| Attribute | Derived from |
+| --- | --- |
+| `[Key]` | Inline or table-level `PRIMARY KEY` |
+| `[DatabaseGenerated(...Identity)]` | `IDENTITY(1,1)` |
+| `[Required]` | `NOT NULL` on a reference-typed column |
+| `[StringLength(n)]` | Declared length on a string column, skipping `MAX` |
+| `[Column("...")]` | Property name differing from the SQL column name |
+
+Using directives are emitted only when the attributes actually need them.
 
 ## What it handles
 

@@ -6,9 +6,15 @@ import keyword
 import re
 
 from .parser import Table
-from .types import to_csharp_type
+from .types import csharp_base_type, is_value_type, to_csharp_type
 
 INDENT = "    "
+
+VALIDATION_USING = "using System.ComponentModel.DataAnnotations;"
+SCHEMA_USING = "using System.ComponentModel.DataAnnotations.Schema;"
+
+#: NVARCHAR(MAX) and friends parse to this sentinel and carry no usable length.
+_UNBOUNDED_LENGTH = -1
 
 _CSHARP_KEYWORDS = frozenset(
     {
@@ -51,27 +57,82 @@ def to_property_name(column_name: str, class_name: str) -> str:
     return name
 
 
+def _annotations_for(column, property_name: str) -> tuple[str, ...]:
+    """Return the data annotation lines that apply to `column`."""
+    annotations: list[str] = []
+
+    if column.is_primary_key:
+        annotations.append("[Key]")
+    if column.is_identity:
+        annotations.append("[DatabaseGenerated(DatabaseGeneratedOption.Identity)]")
+    if property_name.lstrip("@") != column.name:
+        annotations.append(f'[Column("{column.name}")]')
+    if not column.is_nullable and not is_value_type(column.sql_type):
+        annotations.append("[Required]")
+
+    is_string = csharp_base_type(column.sql_type) == "string"
+    has_bound_length = (
+        column.max_length is not None and column.max_length > _UNBOUNDED_LENGTH
+    )
+    if is_string and has_bound_length:
+        annotations.append(f"[StringLength({column.max_length})]")
+
+    return tuple(annotations)
+
+
+def _required_usings(annotation_lines: list[str]) -> list[str]:
+    """Return the using directives the emitted annotations depend on."""
+    joined = "".join(annotation_lines)
+    usings: list[str] = []
+    if any(tag in joined for tag in ("[Key]", "[Required]", "[StringLength")):
+        usings.append(VALIDATION_USING)
+    if any(tag in joined for tag in ("[DatabaseGenerated", "[Column(")):
+        usings.append(SCHEMA_USING)
+    return usings
+
+
 def _property_line(csharp_type: str, property_name: str) -> str:
     return f"{INDENT}public {csharp_type} {property_name} {{ get; set; }}"
 
 
-def emit_class(table: Table, *, namespace: str | None = None) -> str:
-    """Render `table` as a C# class, optionally wrapped in a file-scoped namespace."""
+def emit_class(
+    table: Table, *, namespace: str | None = None, annotations: bool = False
+) -> str:
+    """Render `table` as a C# class.
+
+    When `annotations` is True, EF Core data annotations derived from the DDL
+    are emitted alongside the required using directives.
+    """
     if table is None:
         raise ValueError("table must not be None")
 
     class_name = to_pascal_case(table.name)
-    lines: list[str] = []
+    body: list[str] = []
+    all_annotations: list[str] = []
 
+    for index, column in enumerate(table.columns):
+        property_name = to_property_name(column.name, class_name)
+        if annotations:
+            column_annotations = _annotations_for(column, property_name)
+            all_annotations.extend(column_annotations)
+            if column_annotations and index > 0:
+                body.append("")
+            body.extend(f"{INDENT}{line}" for line in column_annotations)
+        csharp_type = to_csharp_type(column.sql_type, is_nullable=column.is_nullable)
+        body.append(_property_line(csharp_type, property_name))
+
+    lines: list[str] = []
+    usings = _required_usings(all_annotations) if annotations else []
+    if usings:
+        lines.extend(usings)
+        lines.append("")
     if namespace:
         lines.append(f"namespace {namespace};")
         lines.append("")
 
     lines.append(f"public class {class_name}")
     lines.append("{")
-    for column in table.columns:
-        csharp_type = to_csharp_type(column.sql_type, is_nullable=column.is_nullable)
-        lines.append(_property_line(csharp_type, to_property_name(column.name, class_name)))
+    lines.extend(body)
     lines.append("}")
 
     return "\n".join(lines) + "\n"
