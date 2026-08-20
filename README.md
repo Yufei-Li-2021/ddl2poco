@@ -58,6 +58,13 @@ ddl2poco [input.sql] [-n NAMESPACE] [-a] [-o OUTPUT.cs]
 | `-a`, `--annotations` | Emit EF Core data annotations. |
 | `-o`, `--output` | Write to a file instead of stdout. |
 
+A script containing several tables produces one class per table, with the
+namespace and using directives emitted once at the top:
+
+```console
+$ ddl2poco schema/payroll.sql -n HrWize.Payroll.Domain
+```
+
 Piping works, so it composes with whatever you already use:
 
 ```console
@@ -102,6 +109,7 @@ Using directives are emitted only when the attributes actually need them.
 - Inline and table-level `PRIMARY KEY`, including `CLUSTERED (col ASC)`
 - `FOREIGN KEY`, `UNIQUE`, and `CHECK` constraints skipped cleanly
 - `NVARCHAR(MAX)` and precision arguments like `DECIMAL(18, 2)`
+- Multiple `CREATE TABLE` statements in one script, rendered into one file
 - `snake_case` and `kebab-case` names converted to PascalCase
 - C# keyword collisions escaped (`class` → `@Class`)
 - Properties that would collide with the class name (`Employee.Employee` → `EmployeeValue`)
@@ -125,9 +133,9 @@ Unrecognised types fall back to `object` rather than failing the run.
 
 ## Limitations
 
-It is a focused parser, not a full T-SQL grammar. It reads the **first**
-`CREATE TABLE` in the input and does not resolve foreign keys into navigation
-properties, expand user-defined types, or read computed column expressions.
+It is a focused parser, not a full T-SQL grammar. It does not resolve foreign
+keys into navigation properties, expand user-defined types, or read computed
+column expressions.
 
 ## Development
 

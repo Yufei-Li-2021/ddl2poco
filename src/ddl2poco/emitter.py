@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import keyword
 import re
+from collections.abc import Sequence
 
 from .parser import Table
 from .types import csharp_base_type, is_value_type, to_csharp_type
@@ -95,34 +95,48 @@ def _property_line(csharp_type: str, property_name: str) -> str:
     return f"{INDENT}public {csharp_type} {property_name} {{ get; set; }}"
 
 
-def emit_class(
-    table: Table, *, namespace: str | None = None, annotations: bool = False
-) -> str:
-    """Render `table` as a C# class.
-
-    When `annotations` is True, EF Core data annotations derived from the DDL
-    are emitted alongside the required using directives.
-    """
-    if table is None:
-        raise ValueError("table must not be None")
-
+def _render_class(table: Table, annotations: bool) -> tuple[list[str], list[str]]:
+    """Return the rendered lines for one class and the annotations it used."""
     class_name = to_pascal_case(table.name)
     body: list[str] = []
-    all_annotations: list[str] = []
+    used: list[str] = []
 
     for index, column in enumerate(table.columns):
         property_name = to_property_name(column.name, class_name)
         if annotations:
             column_annotations = _annotations_for(column, property_name)
-            all_annotations.extend(column_annotations)
+            used.extend(column_annotations)
             if column_annotations and index > 0:
                 body.append("")
             body.extend(f"{INDENT}{line}" for line in column_annotations)
         csharp_type = to_csharp_type(column.sql_type, is_nullable=column.is_nullable)
         body.append(_property_line(csharp_type, property_name))
 
+    return [f"public class {class_name}", "{", *body, "}"], used
+
+
+def emit_classes(
+    tables: Sequence[Table], *, namespace: str | None = None, annotations: bool = False
+) -> str:
+    """Render every table in `tables` into a single C# source file.
+
+    Using directives and the namespace declaration are emitted once, ahead of
+    all classes.
+    """
+    if not tables:
+        raise ValueError("tables must not be empty")
+
+    rendered: list[list[str]] = []
+    used: list[str] = []
+    for table in tables:
+        if table is None:
+            raise ValueError("tables must not contain None")
+        class_lines, class_annotations = _render_class(table, annotations)
+        rendered.append(class_lines)
+        used.extend(class_annotations)
+
     lines: list[str] = []
-    usings = _required_usings(all_annotations) if annotations else []
+    usings = _required_usings(used) if annotations else []
     if usings:
         lines.extend(usings)
         lines.append("")
@@ -130,9 +144,18 @@ def emit_class(
         lines.append(f"namespace {namespace};")
         lines.append("")
 
-    lines.append(f"public class {class_name}")
-    lines.append("{")
-    lines.extend(body)
-    lines.append("}")
+    for index, class_lines in enumerate(rendered):
+        if index > 0:
+            lines.append("")
+        lines.extend(class_lines)
 
     return "\n".join(lines) + "\n"
+
+
+def emit_class(
+    table: Table, *, namespace: str | None = None, annotations: bool = False
+) -> str:
+    """Render a single table as a C# class."""
+    if table is None:
+        raise ValueError("table must not be None")
+    return emit_classes((table,), namespace=namespace, annotations=annotations)

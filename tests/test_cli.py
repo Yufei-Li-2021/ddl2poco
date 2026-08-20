@@ -71,3 +71,18 @@ def test_omits_annotations_by_default(ddl_file, capsys):
     main([str(ddl_file)])
 
     assert "[StringLength(50)]" not in capsys.readouterr().out
+
+
+def test_emits_all_tables_found_in_the_file(tmp_path, capsys):
+    path = tmp_path / "schema.sql"
+    path.write_text(
+        "CREATE TABLE A (Id INT NOT NULL); CREATE TABLE B (Id INT NOT NULL);",
+        encoding="utf-8",
+    )
+
+    exit_code = main([str(path)])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "public class A" in out
+    assert "public class B" in out
