@@ -163,8 +163,8 @@ def _apply_table_primary_keys(
     )
 
 
-def parse_create_table(ddl: str) -> Table:
-    """Parse the first CREATE TABLE statement found in `ddl`."""
+def _validate_ddl(ddl: str) -> None:
+    """Reject input that cannot possibly contain a parsable table."""
     if not isinstance(ddl, str):
         raise TypeError("ddl must be a string")
     if not ddl.strip():
@@ -172,10 +172,9 @@ def parse_create_table(ddl: str) -> Table:
     if len(ddl) > MAX_DDL_LENGTH:
         raise DdlParseError(f"DDL exceeds {MAX_DDL_LENGTH} characters")
 
-    match = _CREATE_TABLE_RE.search(ddl)
-    if match is None:
-        raise DdlParseError("No CREATE TABLE statement found")
 
+def _table_from_match(ddl: str, match: re.Match[str]) -> Table:
+    """Build a Table from an already-matched CREATE TABLE header."""
     schema, name = _split_qualified_name(match.group("name"))
     body = _extract_body(ddl, match.end() - 1)
 
@@ -195,3 +194,20 @@ def parse_create_table(ddl: str) -> Table:
         columns=_apply_table_primary_keys(tuple(columns), constraints),
         schema=schema,
     )
+
+
+def parse_all_tables(ddl: str) -> tuple[Table, ...]:
+    """Parse every CREATE TABLE statement in `ddl`, in source order."""
+    _validate_ddl(ddl)
+
+    tables = tuple(
+        _table_from_match(ddl, match) for match in _CREATE_TABLE_RE.finditer(ddl)
+    )
+    if not tables:
+        raise DdlParseError("No CREATE TABLE statement found")
+    return tables
+
+
+def parse_create_table(ddl: str) -> Table:
+    """Parse the first CREATE TABLE statement found in `ddl`."""
+    return parse_all_tables(ddl)[0]

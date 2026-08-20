@@ -6,8 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from .emitter import emit_class
-from .parser import DdlParseError, parse_create_table
+from .emitter import emit_classes
+from .parser import DdlParseError, parse_all_tables
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -58,9 +58,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         source = _read_source(args.input)
-        table = parse_create_table(source)
-        rendered = emit_class(
-            table, namespace=args.namespace, annotations=args.annotations
+        tables = parse_all_tables(source)
+        rendered = emit_classes(
+            tables, namespace=args.namespace, annotations=args.annotations
         )
     except (DdlParseError, ValueError) as error:
         print(f"ddl2poco: {error}", file=sys.stderr)
