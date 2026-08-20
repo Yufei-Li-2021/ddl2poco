@@ -73,3 +73,14 @@ def to_csharp_type(sql_type: str, *, is_nullable: bool, strict: bool = False) ->
 def is_known_sql_type(sql_type: str) -> bool:
     """Return True when the SQL Server type has a known C# mapping."""
     return sql_type.strip().strip("[]").lower() in _TYPE_MAP
+
+
+def is_value_type(sql_type: str) -> bool:
+    """Return True when the SQL Server type maps to a C# value type."""
+    mapped = _TYPE_MAP.get(sql_type.strip().strip("[]").lower())
+    return bool(mapped and mapped[1])
+
+
+def csharp_base_type(sql_type: str) -> str:
+    """Return the C# type name without any nullable suffix."""
+    return to_csharp_type(sql_type, is_nullable=False)

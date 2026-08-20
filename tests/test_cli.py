@@ -58,3 +58,16 @@ def test_returns_error_code_for_unparsable_ddl(tmp_path, capsys):
 
     assert exit_code == 1
     assert "ddl2poco:" in capsys.readouterr().err
+
+
+def test_emits_annotations_when_flag_given(ddl_file, capsys):
+    exit_code = main([str(ddl_file), "--annotations"])
+
+    assert exit_code == 0
+    assert "[StringLength(50)]" in capsys.readouterr().out
+
+
+def test_omits_annotations_by_default(ddl_file, capsys):
+    main([str(ddl_file)])
+
+    assert "[StringLength(50)]" not in capsys.readouterr().out

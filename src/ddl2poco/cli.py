@@ -29,6 +29,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Wrap the class in this file-scoped namespace.",
     )
     parser.add_argument(
+        "-a",
+        "--annotations",
+        action="store_true",
+        help="Emit EF Core data annotations ([Key], [Required], [StringLength], ...).",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         help="Write to this file instead of stdout.",
@@ -53,7 +59,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         source = _read_source(args.input)
         table = parse_create_table(source)
-        rendered = emit_class(table, namespace=args.namespace)
+        rendered = emit_class(
+            table, namespace=args.namespace, annotations=args.annotations
+        )
     except (DdlParseError, ValueError) as error:
         print(f"ddl2poco: {error}", file=sys.stderr)
         return EXIT_ERROR
